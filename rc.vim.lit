@@ -1,0 +1,386 @@
+
+Run-commands
+============
+
+This file is both a literary explanation of the choices I've made and the
+actual code needed to make `vim` into a real workhorse. My configuration
+is a living beast that needs to be tamed and tested from time to time.
+That is why I keep a list here of annoyances and/or ideas that I think
+could be useful.
+
+Annoyances
+----------
+
+* Neovim doesn't play well with auto-completion
+* In-correct highlighting of `.lit`-files
+
+Ideas
+-----
+
+* Execute external command based on selected text
+  - Open url in browser
+  - Open filepath in finder
+  - If it starts with `$`, simply execute the command etc..
+  * WIP - I'm creating a `go` CLI and a `vim`-wrapper
+
+
+A high-level overview of `rc.vim`:
+----------------------------------
+
+    << * >>=
+    << setup >>
+    << plug-ins >>
+    << verify setup >>
+    << plug-in preferences >>
+    << commands >>
+    << abbreviations >>
+    << key bindings >>
+    << auto commands >>
+    << additional preferences >>
+
+I've chosen to use `Plug` for managing plug-ins. `Plug` allows for
+asynchronous download and installation, so it's blazing fast.
+
+    << setup >>=
+    " Ignore setup for small & tiny distribution
+    if !1 | finish | endif
+    if has('vim_starting')
+      if &compatible
+        set nocompatible
+      endif
+    endif
+
+    " Automatically install `Plug` if it's not already installed
+    if empty(glob('~/.vim/autoload/plug.vim'))
+      silent !curl -fLo ~/.vim/autoload/plug.vim --create-dirs
+        \ https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+      autocmd VimEnter * PlugInstall
+    endif
+    call plug#begin(expand('~/.vim/plugged/'))
+
+    << auto commands >>=
+    " Reload settings when saving the `.lit` source-file
+    augroup Buf-Write-Post
+      autocmd!
+      autocmd bufwritepost rc.vim.lit
+        \ silent exec('!lit -c %')
+        \ | exec 'source '.resolve(expand('%:p:r'))
+    augroup END
+
+We can tell `Plug` that our list of dependencies is complete and it
+will in fact download all missing plug-ins for us.
+
+    << verify setup >>=
+    call plug#end()
+
+When using a lot of plug-ins you risk that `vim` can start moving at a slower
+pace. To find out what's causing trouble, I've found benchmarking the
+initiation phase useful. You can do so with `:BenchVimrc`.
+
+    << plug-ins >>=
+    Plug 'mattn/benchvimrc-vim'
+
+Natural default-settings
+------------------------
+
+`Vim` is a long-lived editor and has roots in some even more long-lived
+editors, specifically `vi` and `ed`. With long-lived project comes baggage
+and `vim` is no exception. With `natural.vim` I've tried to even out some
+of the quirks and generally make `vim` behave more as you'd expect.
+
+    << plug-ins >>=
+    Plug 'hkjels/natural.vim'
+    Plug 'tpope/vim-sleuth'
+    Plug 'tpope/vim-speeddating'
+
+In addition to settings that I believe almost everyone can agree upon are
+incorrect by default, there are a few that not so many will appreciate.
+These did not really deserve it's own package.
+
+    << plug-in preferences >>=
+    set tabstop=2                       " Number of spaces a tab counts for
+    set shiftwidth=2                    " Width to shift on indent operations
+    set expandtab                       " Use space instead of tabs in insert-mode
+    set smarttab                        " Insert blanks according to shiftwidth in start of lines
+    set tags+=.git/tags;.tags           " Store tags with each project
+    set foldmethod=indent               " Fold by indentation-level
+    set foldnestmax=3                   " Number of nested folds
+    set nofoldenable                    " Don´t fold when opening files
+    set keywordprg=:help                " Command to execute with `K`
+    set synmaxcol=200                   " Highlight only column 1-[200]
+    set pastetoggle=<F9>                " Toggle paste-mode
+    set mouse=a                         " Enable mouse
+    set mousehide                       " Hide pointer when typing
+    set laststatus=2                    " Always display the status-line
+    set clipboard=unnamed               " Yank and paste with the system clipboard
+    set relativenumber                  " Use relative line-numbers
+    set background=dark                 " Use dark color-scheme
+
+    << key bindings >>=
+    let g:mapleader=' '                 " Sets <leader> to <space>
+    let g:maplocalleader='\\'           " <localleader> to \
+    nnoremap p p`]
+    vnoremap y y`]
+    vnoremap p p`]
+
+
+Make it shiny like a gem
+------------------------
+
+    << plug-ins >>=
+    Plug 'altercation/vim-colors-solarized'
+    Plug 'ap/vim-css-color', {'for': ['html', 'css']}
+    Plug 'ivyl/vim-bling'
+    Plug 'junegunn/goyo.vim', {'on': 'Goyo'}
+    Plug 'junegunn/limelight.vim', {'on': 'Limelight'}
+    Plug 'edkolev/tmuxline.vim'
+    Plug 'bling/vim-airline'
+
+    << plug-in preferences >>=
+    colorscheme solarized                 " Active color-scheme
+    highlight SignColumn ctermbg=0        " Solarized bugfix
+    let g:limelight_conceal_ctermfg = 240
+
+    " Airline
+    let g:airline_powerline_fonts = 1
+    let g:tmuxline_powerline_separators = 0
+    let g:airline_left_sep=' '
+    let g:airline_right_sep=' '
+    let g:airline_left_alt_sep =' '
+    let g:airline_right_alt_sep =' '
+
+    << auto commands >>=
+    autocmd User GoyoEnter Limelight
+    autocmd User GoyoLeave Limelight!
+
+    << key bindings >>=
+    nnoremap <leader>K :Goyo<cr>
+
+
+Navigation
+----------
+
+    << key bindings >>=
+    noremap  <Up>    <nop>
+    noremap  <Down>  <nop>
+    noremap  <Left>  <nop>
+    noremap  <Right> <nop>
+    nnoremap <left>  :tabprevious<cr>
+    nnoremap <right> :tabnext<cr>
+
+### FZF
+
+`FZF` is an interface to deal with lists efficiently. I use `fzf` mostly
+for quick navigation of files, buffers and tags, but it can do much more,
+so don't be fooled by the heading.
+
+    << setup >>=
+    set rtp+=/usr/local/Cellar/fzf/0.9.2
+
+    << commands >>=
+    command! FZFMru call fzf#run({
+      \'source': v:oldfiles,
+      \'sink' : 'e ',
+      \'options' : '-m',
+      \})
+
+    command! -nargs=1 FZFAg call fzf#run({
+      \'source': Arghandler(<f-args>),
+      \'sink': function('AgHandler'),
+      \'options': '-m'
+      \})
+
+    function! AgHandler(l)
+      let keys = split(a:l,':')
+      execute 'tabe +' . keys[-2] . ' ' . escape(keys[-1], ' ')
+    endfunction
+
+    function! Arghandler(l)
+      return "ag -i " . a:l . " | sed 's@\\(.[^:]*\\):\\(.[^:]*\\):\\(.*\\)@\\3:\\2:\\1@' "
+    endfunction
+
+    command! FZFTag call fzf#run({
+      \ 'source': TagCommand(),
+      \ 'sink': 'tag',
+      \ })
+
+    function! TagCommand()
+      return substitute('awk _!/^!/ { print \$1 }_ ', '_', "'", 'g')
+        \ . join(tagfiles(), ' ')
+    endfunction
+
+    << key bindings >>=
+    nnoremap [nav]    <nop>
+    nmap     <leader> [nav]
+    nmap     [nav]o   :FZF<cr>
+    nmap     [nav]r   :FZFMru<cr>
+    nmap     [nav]/   :FZFAg<cr>
+    nmap     [nav]t   :FZFTag<cr>
+
+### Netrw
+
+`Netrw` comes bundled with most distributions of `vim`, but unfortunately
+it's a bit clunky and much to take in, so Tim Pope created `vim-vinegar`
+to make it more user-friendly.
+
+    << plug-ins >>=
+    Plug 'tpope/vim-vinegar'
+
+    << plug-in preferences >>=
+    let g:netrw_list_hide = netrw_gitignore#Hide().'.*\.swp$'
+
+    << auto commands >>=
+    augroup Netrw
+      autocmd!
+      autocmd FileType netrw nmap <buffer> <backspace> -
+      autocmd FileType netrw setlocal bufhidden=wipe
+    augroup END
+
+    " << key bindings >>=
+    nmap     <leader> [nav]
+    nmap     [nav]e   :Explore<cr>
+    nmap     [nav]sp  :Sexplore<cr>
+    nmap     [nav]vs  :Vexplore<cr>
+
+
+Workflow
+--------
+
+    << plug-ins >>=
+    Plug 'tpope/vim-dispatch'
+
+### Tmux integration
+
+    << plug-ins >>=
+    Plug 'christoomey/vim-tmux-navigator'
+    Plug 'tpope/vim-tbone'
+
+
+Source control
+--------------
+
+I mostly use `git` and github, so that's reflected in my setup, but I've
+encountered `darcs` and `mercurial` as well, so they might find their way
+into my setup some day soon.
+
+    << plug-ins >>=
+    Plug 'gregsexton/gitv'
+    Plug 'jaxbot/github-issues.vim'
+    Plug 'mhinz/vim-signify'
+    Plug 'sjl/splice.vim'
+    Plug 'tpope/vim-fugitive'
+    Plug 'tpope/vim-git'
+
+    << plug-in preferences >>=
+    let g:signify_sign_color_inherit_from_linenr = 1
+
+    << abbreviations >>=
+    cabbrev gb Gblame
+    cabbrev gc Gcommit
+    cabbrev gd Gdiff
+    cabbrev gl Gitv
+    cabbrev gp Git push
+    cabbrev gs Gstatus
+
+Editing
+-------
+
+    << plug-ins >>=
+    " Unfortunately, code-completion doesn't sit well with `neovim` yet
+    if has('lua')
+      Plug 'Shougo/neocomplete'
+      Plug 'Shougo/neosnippet.vim'
+      Plug 'Shougo/neosnippet-snippets'
+      Plug 'honza/vim-snippets'
+      Plug 'marijnh/tern_for_vim', {'do': 'npm install', 'for': ['javascript']}
+      Plug 'guileen/vim-node', {'for': ['javascript']}
+    endif
+    Plug 'PeterRincker/vim-argumentative'
+    Plug 'Raimondi/delimitMate'
+    Plug 'Wolfy87/vim-expand'
+    Plug 'joonty/vdebug'
+    Plug 'junegunn/vim-easy-align'
+    Plug 'junegunn/vim-peekaboo'
+    Plug 'kshenoy/vim-signature'
+    Plug 'saihoooooooo/glowshi-ft.vim'
+    Plug 'scrooloose/syntastic'
+    Plug 'sjl/gundo.vim', {'on': 'GundoToggle'}
+    Plug 'tpope/vim-abolish'
+    Plug 'tpope/vim-commentary'
+    Plug 'tpope/vim-endwise'
+    Plug 'tpope/vim-surround'
+    Plug 'tsaleh/vim-align'
+    Plug 'wellle/targets.vim'
+    Plug 'tpope/vim-repeat'
+    Plug 'visualrepeat'
+
+    << plug-in preferences >>=
+    let g:syntastic_check_on_open=1
+    if has('lua')
+      let g:neosnippet#snippets_directory='~/.vim/plugged/vim-snippets/snippets'
+      if has('conceal')
+        set conceallevel=2 concealcursor=i
+      endif
+    endif
+
+    << key bindings >>=
+    vmap <Enter> <Plug>(EasyAlign)
+    nmap ga <Plug>(EasyAlign)
+    nnoremap <expr> s* ':%substitute/\<' . expand('<cword>') . '\>/'
+    map <leader>E :Expand<cr>
+    if has('lua')
+      " NeoSnippet
+      imap <C-k>     <Plug>(neosnippet_expand_or_jump)
+      smap <C-k>     <Plug>(neosnippet_expand_or_jump)
+      xmap <C-k>     <Plug>(neosnippet_expand_target)
+
+      " SuperTab like snippets behavior
+      imap <expr><TAB> neosnippet#expandable_or_jumpable() ?
+      \ "\<Plug>(neosnippet_expand_or_jump)"
+      \: pumvisible() ? "\<C-n>" : "\<TAB>"
+      smap <expr><TAB> neosnippet#expandable_or_jumpable() ?
+      \ "\<Plug>(neosnippet_expand_or_jump)"
+      \: "\<TAB>"
+    endif
+
+    << auto commands >>=
+    autocmd BufNewFile,BufRead *.vim.lit setfiletype vim
+    autocmd BufNewFile,BufRead *.clj.lit setfiletype clojure
+    autocmd BufNewFile,BufRead *.cljs.lit setfiletype clojurescript
+    autocmd BufNewFile,BufRead *.js.lit setfiletype javascript
+
+### Markup
+
+    << plug-ins >>=
+    let g:markup_lang = ['html', 'xml']
+    Plug 'othree/html5.vim', {'for': g:markup_lang}
+    Plug 'tpope/vim-ragtag', {'for': g:markup_lang}
+
+### Lisp
+
+    << plug-ins >>=
+    let g:clojure_types = ['clojure', 'clojurescript', 'edn']
+    Plug 'amdt/vim-niji', {'for': g:clojure_types}
+    Plug 'guns/vim-clojure-highlight', {'for': g:clojure_types}
+    Plug 'guns/vim-clojure-static', {'for': g:clojure_types}
+    Plug 'honza/vim-clojure-conceal', {'for': g:clojure_types}
+    Plug 'tpope/vim-fireplace', {'for': g:clojure_types}
+    Plug 'tpope/vim-leiningen', {'for': g:clojure_types}
+
+### Scripting
+
+    << plug-ins >>=
+    Plug 'jelera/vim-javascript-syntax', {'for': ['javascript', 'json']}
+    Plug 'nathanaelkane/vim-indent-guides', {'for': ['javascript', 'json']}
+    Plug 'pangloss/vim-javascript', {'for': ['javascript', 'json']}
+    Plug 'applescript.vim', {'for': 'applescript'}
+
+Additional local preferences
+----------------------------
+
+    << additional preferences >>=
+    let s:additionalPreferences = expand('~/.vimrc.local')
+    if filereadable(s:additionalPreferences)
+        exec "source " . s:additionalPreferences
+    endif
+
