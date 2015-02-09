@@ -16,6 +16,6 @@ there's actually a compile-step involved. That means you'll need
 everything else is handled by the configuration itself.
 Just fork & clone this repository and run:
 ```sh
-lit ~/.vim/*.lit && ln -s rc.vim ~/.vimrc
+cd .vim && lit -c *.lit && ln -s rc.vim ~/.vimrc
 ```
 
