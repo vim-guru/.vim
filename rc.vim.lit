@@ -50,6 +50,12 @@ asynchronous download and installation, so it's blazing fast.
       endif
     endif
 
+    " Python should play nicely with Neovim
+    if has('nvim')
+      let g:python_host_prog = '/usr/local/bin/python'
+      runtime! python_setup.vim
+    endif
+
     " Automatically install `Plug` if it's not already installed
     if empty(glob('~/.vim/autoload/plug.vim'))
       silent !curl -fLo ~/.vim/autoload/plug.vim --create-dirs
@@ -62,9 +68,8 @@ asynchronous download and installation, so it's blazing fast.
     " Reload settings when saving the `.lit` source-file
     augroup Buf-Write-Post
       autocmd!
-      autocmd bufwritepost rc.vim.lit
-        \ silent exec('!lit -c %')
-        \ | exec 'source '.resolve(expand('%:p:r'))
+      autocmd bufwritepost *.vim.lit
+        \ exec 'Dispatch! cd "%:p:h" && lit -c "%:p:t" \| source ' . expand('~/.vimrc')
     augroup END
 
 We can tell `Plug` that our list of dependencies is complete and it
@@ -114,7 +119,8 @@ These did not really deserve it's own package.
     set laststatus=2                    " Always display the status-line
     set clipboard=unnamed               " Yank and paste with the system clipboard
     set relativenumber                  " Use relative line-numbers
-    set background=dark                 " Use dark color-scheme
+    set cursorline                      " Colored line @ cursor
+    set matchpairs+=<:>                 " Highlighting of angle-brackets
 
     << key bindings >>=
     let g:mapleader=' '                 " Sets <leader> to <space>
@@ -122,6 +128,8 @@ These did not really deserve it's own package.
     nnoremap p p`]
     vnoremap y y`]
     vnoremap p p`]
+    nnoremap Q @
+    nnoremap @ Q
 
 
 Make it shiny like a gem
@@ -130,30 +138,34 @@ Make it shiny like a gem
     << plug-ins >>=
     Plug 'altercation/vim-colors-solarized'
     Plug 'ap/vim-css-color', {'for': ['html', 'css']}
+    Plug 'vim-guru/NrrwRgn'
     Plug 'ivyl/vim-bling'
     Plug 'junegunn/goyo.vim', {'on': 'Goyo'}
     Plug 'junegunn/limelight.vim', {'on': 'Limelight'}
-    Plug 'edkolev/tmuxline.vim'
+    Plug 'gregsexton/MatchTag', {'for': ['html', 'xml', 'xhtml']}
     Plug 'bling/vim-airline'
 
     << plug-in preferences >>=
-    colorscheme solarized                 " Active color-scheme
-    highlight SignColumn ctermbg=0        " Solarized bugfix
+    let g:solarized_visibility = "high"
+    let g:solarized_contrast = "high"
     let g:limelight_conceal_ctermfg = 240
-
-    " Airline
-    let g:airline_powerline_fonts = 1
-    let g:tmuxline_powerline_separators = 0
+    let g:mta_set_default_matchtag_color = 0
     let g:airline_left_sep=' '
     let g:airline_right_sep=' '
-    let g:airline_left_alt_sep =' '
-    let g:airline_right_alt_sep =' '
+    let g:airline_left_alt_sep=' '
+    let g:airline_right_alt_sep=' '
+    colorscheme solarized
+    highlight! SignColumn ctermbg=0
+    highlight! MatchParen ctermbg=white ctermfg=0
 
     << auto commands >>=
+    autocmd User NrrwRgnEnter Goyo
+    autocmd User NrrwRgnLeave Goyo!
     autocmd User GoyoEnter Limelight
     autocmd User GoyoLeave Limelight!
 
     << key bindings >>=
+    vnoremap <leader>K :NR<cr>
     nnoremap <leader>K :Goyo<cr>
 
 
@@ -165,8 +177,9 @@ Navigation
     noremap  <Down>  <nop>
     noremap  <Left>  <nop>
     noremap  <Right> <nop>
-    nnoremap <left>  :tabprevious<cr>
-    nnoremap <right> :tabnext<cr>
+    noremap <leader>vim exec 'edit '.resolve(expand('~/.vimrc')).'.lit'<cr>
+    nnoremap <leader>S :%s//<left>
+    vnoremap <leader>S :s//<left>
 
 ### FZF
 
@@ -174,20 +187,18 @@ Navigation
 for quick navigation of files, buffers and tags, but it can do much more,
 so don't be fooled by the heading.
 
-    << setup >>=
-    set rtp+=/usr/local/Cellar/fzf/0.9.2
+    << plug-ins >>=
+    Plug 'junegunn/fzf', { 'dir': '~/.fzf', 'do': 'yes \| ./install' }
 
     << commands >>=
     command! FZFMru call fzf#run({
       \'source': v:oldfiles,
       \'sink' : 'e ',
-      \'options' : '-m',
       \})
 
     command! -nargs=1 FZFAg call fzf#run({
       \'source': Arghandler(<f-args>),
       \'sink': function('AgHandler'),
-      \'options': '-m'
       \})
 
     function! AgHandler(l)
@@ -214,7 +225,7 @@ so don't be fooled by the heading.
     nmap     <leader> [nav]
     nmap     [nav]o   :FZF<cr>
     nmap     [nav]r   :FZFMru<cr>
-    nmap     [nav]/   :FZFAg<cr>
+    nmap     [nav]/   :FZFAg<space>
     nmap     [nav]t   :FZFTag<cr>
 
 ### Netrw
@@ -228,6 +239,7 @@ to make it more user-friendly.
 
     << plug-in preferences >>=
     let g:netrw_list_hide = netrw_gitignore#Hide().'.*\.swp$'
+    let g:netrw_localrmdir='trash'
 
     << auto commands >>=
     augroup Netrw
@@ -242,12 +254,21 @@ to make it more user-friendly.
     nmap     [nav]sp  :Sexplore<cr>
     nmap     [nav]vs  :Vexplore<cr>
 
-
 Workflow
 --------
 
     << plug-ins >>=
     Plug 'tpope/vim-dispatch'
+
+    << key bindings >>=
+    nnoremap ! :Dispatch!
+
+    << auto commands >>=
+    augroup Dispatch
+      autocmd!
+      autocmd FileType javascript let b:dispatch = 'npm start'
+      autocmd FileType clojurescript let b:dispatch = 'lein figwheel'
+    augroup END
 
 ### Tmux integration
 
@@ -282,6 +303,12 @@ into my setup some day soon.
     cabbrev gp Git push
     cabbrev gs Gstatus
 
+`<leader>b` in visual-mode will show `git blame`
+
+    << key bindings >>=
+    vmap <Leader>b :<C-U>!git blame <C-R>=expand("%:p") <CR> \| sed -n <C-R>=line("'<") <CR>,<C-R>=line("'>") <CR>p <CR>"'")"'")
+
+
 Editing
 -------
 
@@ -298,6 +325,7 @@ Editing
     Plug 'PeterRincker/vim-argumentative'
     Plug 'Raimondi/delimitMate'
     Plug 'Wolfy87/vim-expand'
+    Plug 'itchyny/vim-cycle'
     Plug 'joonty/vdebug'
     Plug 'junegunn/vim-easy-align'
     Plug 'junegunn/vim-peekaboo'
@@ -317,30 +345,39 @@ Editing
     << plug-in preferences >>=
     let g:syntastic_check_on_open=1
     if has('lua')
+      let g:neocomplete#enable_at_startup=1
       let g:neosnippet#snippets_directory='~/.vim/plugged/vim-snippets/snippets'
       if has('conceal')
         set conceallevel=2 concealcursor=i
       endif
     endif
 
+    << commands >>=
+    command! SudoWrite exec 'w !sudo tee % > /dev/null' | e!
+
+    << abbreviations >>=
+    cabbrev w!! SudoWrite
+
     << key bindings >>=
+    nmap s ysi
+    nmap S ysa
+    nmap s$ ys$
     vmap <Enter> <Plug>(EasyAlign)
     nmap ga <Plug>(EasyAlign)
     nnoremap <expr> s* ':%substitute/\<' . expand('<cword>') . '\>/'
     map <leader>E :Expand<cr>
+    map <leader>U :GundoToggle<cr>
     if has('lua')
       " NeoSnippet
       imap <C-k>     <Plug>(neosnippet_expand_or_jump)
       smap <C-k>     <Plug>(neosnippet_expand_or_jump)
       xmap <C-k>     <Plug>(neosnippet_expand_target)
-
-      " SuperTab like snippets behavior
       imap <expr><TAB> neosnippet#expandable_or_jumpable() ?
-      \ "\<Plug>(neosnippet_expand_or_jump)"
-      \: pumvisible() ? "\<C-n>" : "\<TAB>"
+        \ "\<Plug>(neosnippet_expand_or_jump)"
+        \: pumvisible() ? "\<C-n>" : "\<TAB>"
       smap <expr><TAB> neosnippet#expandable_or_jumpable() ?
-      \ "\<Plug>(neosnippet_expand_or_jump)"
-      \: "\<TAB>"
+        \ "\<Plug>(neosnippet_expand_or_jump)"
+        \: "\<TAB>"
     endif
 
     << auto commands >>=
@@ -360,7 +397,7 @@ Editing
 
     << plug-ins >>=
     let g:clojure_types = ['clojure', 'clojurescript', 'edn']
-    Plug 'amdt/vim-niji', {'for': g:clojure_types}
+    Plug 'vim-niji', {'for': g:clojure_types}
     Plug 'guns/vim-clojure-highlight', {'for': g:clojure_types}
     Plug 'guns/vim-clojure-static', {'for': g:clojure_types}
     Plug 'honza/vim-clojure-conceal', {'for': g:clojure_types}
